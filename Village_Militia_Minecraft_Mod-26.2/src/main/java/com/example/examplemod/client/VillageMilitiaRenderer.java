@@ -2,7 +2,9 @@ package com.example.examplemod.client;
 
 import com.example.examplemod.ExampleMod;
 import com.example.examplemod.VillageMilitiaEntity;
+import com.example.examplemod.client.VillageMilitiaRenderer.MyRenderState;
 
+import net.minecraft.client.renderer.entity.ArmorModelSet;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -13,36 +15,57 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 
-// 🌟 1. 將類別泛型中的第二個參數換成我們自訂的 MyRenderState
 public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEntity, VillageMilitiaRenderer.MyRenderState, HumanoidModel<VillageMilitiaRenderer.MyRenderState>> {
 
     private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(
         ExampleMod.MODID,
-        "textures/entity/village_self_defender.png"
+        "textures/entity/village_millita.png"
     );
 
     public VillageMilitiaRenderer(EntityRendererProvider.Context context) {
+      // 呼叫父類建構子
         super(context, new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), 0.5F);
+
+        // 1. 使用官方定義的 PLAYER_ARMOR (這已經包含 helmet, chestplate, leggings, boots 的註冊)
+        // 2. 透過 bake 方法將這些位置轉換為可用的模型集
+        var armorModelSet = net.minecraft.client.renderer.entity.ArmorModelSet.bake(
+            ModelLayers.PLAYER_ARMOR,
+            context.getModelSet(),
+            part -> new HumanoidModel<MyRenderState>(part)
+        );
+
+        // 3. 顯式指定泛型參數 <MyRenderState, HumanoidModel<MyRenderState>, HumanoidModel<MyRenderState>>
+        this.addLayer(new net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer<
+            MyRenderState, 
+            HumanoidModel<MyRenderState>, 
+            HumanoidModel<MyRenderState>
+        >(
+            this,
+            armorModelSet,
+            context.getEquipmentRenderer()
+        ));
     }
 
-    // 🌟 2. 建立自訂的渲染狀態儲存槽（RenderState）
     public static class MyRenderState extends HumanoidRenderState {
         public boolean isHoldingCrossbow = false;
         public boolean isChargingCrossbow = false;
         public boolean isAggressive = false;
     }
 
-    // 🌟 3. 告訴遊戲我們要使用自訂的狀態槽
     @Override
     public MyRenderState createRenderState() {
         return new MyRenderState();
     }
 
-    // 🌟 4. 【核心關鍵】在資料提取階段，將 Entity 的真實狀態拷貝進 RenderState
     @Override
     public void extractRenderState(VillageMilitiaEntity entity, MyRenderState state, float partialTick) {
+        // 1. 先讓父類別提取基本狀態
         super.extractRenderState(entity, state, partialTick);
         
+        // 🌟 修正點 1：強制覆蓋父類別（Pillager）的蹲下判定！
+        // 這樣你在 Entity 裡面設定的 Pose.CROUCHING 或是 isShiftKeyDown() 才會真正生效！
+        state.isCrouching = entity.isShiftKeyDown() || entity.getPose() == net.minecraft.world.entity.Pose.CROUCHING;
+
         // 讀取主手物品
         ItemStack mainHand = entity.getMainHandItem();
         state.isHoldingCrossbow = mainHand.getItem() instanceof CrossbowItem;
@@ -51,34 +74,54 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
         state.isChargingCrossbow = entity.isChargingCrossbow();
         state.isAggressive = entity.isAggressive() || entity.getTarget() != null;
 
-        // 🌟 5. 根據拷貝出來的狀態，直接強行改寫人類模型的雙手姿勢（ArmPose）！
-        // 🌟 重新校正：蓄力完畢後，雙手必須「同時」保持 CROSSBOW_HOLD 姿勢
+        // 雙手姿勢（ArmPose）核心邏輯
         if (state.isHoldingCrossbow) {
-            if (state.isChargingCrossbow) {
-                // 1. 正在拉弦蓄力階段
+            
+                // 核心關鍵：先確保蓄力時間有傳進去（這段一定要在前面）
+            if (entity.isUsingItem() && entity.getUseItem().getItem() instanceof CrossbowItem) {
+                state.isUsingItem = true;
+                state.useItemHand = entity.getUsedItemHand();
+                state.ticksUsingItem = (float) entity.getTicksUsingItem();
+                state.maxCrossbowChargeDuration = (float) CrossbowItem.getChargeDuration(entity.getUseItem(), entity);
+            }
+            boolean isCharged = CrossbowItem.isCharged(mainHand);
+            // 🌟 正確的優先級分層：
+            if (state.isChargingCrossbow || entity.isUsingItem()) {
+                // 只要正在拉弦，絕對優先播放拉弦動畫！！！
                 state.leftArmPose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
                 state.rightArmPose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
-            } else if (state.isAggressive) {
-                // 2. 蓄力完成了，或者是正在瞄準目標準備發射
-                // 💡 關鍵：雙手都必須無條件填入 CROSSBOW_HOLD，缺一不可！
-                state.leftArmPose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
-                state.rightArmPose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
             } else {
-                // 3. 平常沒戰鬥、單純把弩拿在手上的巡邏姿勢（可選：看你想讓牠垂手還是端弩）
-                // 如果想讓牠平常沒事也端著弩，就維持 CROSSBOW_HOLD；想放鬆就改回 EMPTY
-                state.leftArmPose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
-                state.rightArmPose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
+                // 舉弩還是放鬆
+                if (isCharged ||state.isAggressive || entity.getTarget() != null) {
+                    state.leftArmPose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
+                    state.rightArmPose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
+                    state.attackTime = 0.0F;
+                } else {
+                    state.leftArmPose = HumanoidModel.ArmPose.EMPTY;
+                    state.rightArmPose = HumanoidModel.ArmPose.EMPTY;
+                }
             }
-        } else if (mainHand.is(Items.IRON_SWORD) && state.isAggressive) {
-            // 拿鐵劍戰鬥
-            state.rightArmPose = HumanoidModel.ArmPose.ITEM;
+        } else {
+            if ((mainHand.is(Items.IRON_SWORD) || mainHand.is(Items.IRON_SPEAR)) && state.isAggressive) {
+                state.rightArmPose = HumanoidModel.ArmPose.ITEM;
+            } else {
+                state.rightArmPose = HumanoidModel.ArmPose.EMPTY;
+            }
+
+            // 2. 處理副手（左臂）的盾牌格擋邏輯
+            if (state.isUsingItem && state.useItemHand == net.minecraft.world.InteractionHand.OFF_HAND) {
+                // 進入戰鬥舉盾，強行將左手改為 BLOCK 姿勢！
+                state.leftArmPose = HumanoidModel.ArmPose.BLOCK;
+            } else {
+                // 平常沒舉盾，左手放鬆
+                state.leftArmPose = HumanoidModel.ArmPose.EMPTY;
+            }
         }
     }
-
+   
+   
     @Override
     public Identifier getTextureLocation(MyRenderState state) {
         return TEXTURE;
     }
-
-    
 }
