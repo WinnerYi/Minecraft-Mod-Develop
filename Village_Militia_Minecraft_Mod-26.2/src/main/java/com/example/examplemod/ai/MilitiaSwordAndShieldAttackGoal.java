@@ -1,38 +1,36 @@
-package com.example.examplemod.ai; // 💡 確保這裡的 package 路徑與你的資料夾結構一致
+package com.example.examplemod.ai;
 
 import com.example.examplemod.VillageMilitiaEntity;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Items;
+import net.minecraft.server.level.ServerLevel;
 import java.util.EnumSet;
 
 public class MilitiaSwordAndShieldAttackGoal extends Goal {
+    private double strafeDirection = 0.0D;
     private final VillageMilitiaEntity mob;
-    private int attackCooldown = 0;
-    private int shieldTicks = 0;
+    private double attackCooldown = 0.0D;
+    private double shieldTicks = 0.0D;
     private int retreatTicks = 0;
 
     public MilitiaSwordAndShieldAttackGoal(VillageMilitiaEntity mob) {
         this.mob = mob;
-        // 宣告這個 AI 會同時控制移動 (MOVE) 與看向敵人 (LOOK)
         this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
     }
 
     @Override
     public boolean canUse() {
         LivingEntity target = this.mob.getTarget();
-        // 1. 基本檢查：有目標、目標還活著
         if (target == null || !target.isAlive()) {
             return false;
         }
-        
-        // 2. 檢查手上拿的是不是遠程武器（弩）
-        // 如果拿的是弩，就「不要」用這個近戰 AI，讓給遠程 AI 去執行
-        if (this.mob.getMainHandItem().getItem() instanceof net.minecraft.world.item.CrossbowItem) {
+        if (this.mob.getMainHandItem().getItem() instanceof CrossbowItem) {
             return false;
         }
-        
-        // 3. 只要不是拿弩，剩下的情況（空手、拿劍、拿任何近戰武器）都允許啟動這個拉扯 AI！
         return true;
     }
 
@@ -45,7 +43,12 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
 
     @Override
     public void stop() {
-        this.mob.stopUsingItem(); // 確保 AI 停止時盾牌會安全放下
+        this.mob.stopUsingItem();
+        this.mob.getNavigation().stop();
+        // 如果下馬了，順便確保馬也停下
+        if (this.mob.getVehicle() instanceof Mob vehicleMob) {
+            vehicleMob.getNavigation().stop();
+        }
     }
 
     @Override
@@ -58,77 +61,138 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
         LivingEntity target = this.mob.getTarget();
         if (target == null) return;
 
-        // 1. 強制盯著目標看（鎖定視線與身體）
-        this.mob.getLookControl().setLookAt(target, 100.0F, 100.0F);
-        this.mob.setYRot(this.mob.yHeadRot);
-        this.mob.yBodyRot = this.mob.yHeadRot;
+        // 1. 視線鎖定（無論如何，眼睛盯著怪）
+        this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
 
         double distanceSq = this.mob.distanceToSqr(target);
-
-        net.minecraft.world.item.Item currentWeapon = this.mob.getMainHandItem().getItem();
-        double attackReach = 8.5D; 
-        if (this.mob.getMainHandItem().has(net.minecraft.core.component.DataComponents.KINETIC_WEAPON)) {
-            attackReach = 13.0D;
-        }
+        double attackReach = this.getAttackReachSqr(target);
 
         if (this.attackCooldown > 0) {
-            this.attackCooldown--;
+            this.attackCooldown = Math.max(0, this.attackCooldown - 1.0D);
         }
+
+        // 🐎 檢查目前是不是騎乘狀態
+        boolean isRiding = this.mob.isPassenger() && this.mob.getVehicle() instanceof net.minecraft.world.entity.PathfinderMob;
 
         // 🔄 戰鬥拉扯狀態機
         if (this.retreatTicks > 0) {
-            // 【階段 1】：砍完人，直直倒退嚕
             this.retreatTicks--;
 
-            // 🛑 完全切斷原版尋路
-            this.mob.getNavigation().stop();
+            if (isRiding) {
+                // 🐎 騎兵撤退：戰馬調頭全速奔跑（此時不舉盾，專心控馬）
+                net.minecraft.world.entity.PathfinderMob vehicleMob = (net.minecraft.world.entity.PathfinderMob) this.mob.getVehicle();
+                net.minecraft.world.phys.Vec3 retreatPos = net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(
+                    vehicleMob, 8, 4, target.position()
+                );
+                if (retreatPos != null) {
+                    vehicleMob.getNavigation().moveTo(retreatPos.x, retreatPos.y, retreatPos.z, 1.4D);
+                }
+            } else {
+                // 🏃‍♂️ 步兵撤退：維持你原本的物理斜向推力
+                this.mob.getNavigation().stop();
+                double deltaX = this.mob.getX() - target.getX();
+                double deltaZ = this.mob.getZ() - target.getZ();
+                double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 
-            // 🚀 【物理強推】計算從目標「背對」離開的向量
-            double deltaX = this.mob.getX() - target.getX();
-            double deltaZ = this.mob.getZ() - target.getZ();
-            double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
+                if (distance > 0) {
+                    double backX = deltaX / distance;
+                    double backZ = deltaZ / distance;
+                    double strafeX = backZ;
+                    double strafeZ = -backX;
 
-            if (distance > 0) {
-                // 正規化方向，並乘以倒退速度（例如 0.25）
-                double speed = 0.18D; 
-                double vecX = (deltaX / distance) * speed;
-                double vecZ = (deltaZ / distance) * speed;
-                
-                // 直接修改實體的運動向量（Delta Movement），給予往後的物理推力
-                // 保持原本的 Y 軸（地心引力/跳躍），只強推 X 和 Z
-                this.mob.setDeltaMovement(vecX, this.mob.getDeltaMovement().y, vecZ);
+                    double backSpeed = 0.1D;    
+                    double strafeSpeed = 0.1D;  
+
+                    double vecX = (backX * backSpeed) + (strafeX * strafeSpeed * this.strafeDirection);
+                    double vecZ = (backZ * backSpeed) + (strafeZ * strafeSpeed * this.strafeDirection);
+                    
+                    this.mob.setDeltaMovement(vecX, this.mob.getDeltaMovement().y, vecZ);
+                    this.mob.hurtMarked = true;
+                }
+
+                // 🏃‍♂️ 步兵步行的舊邏輯：後退快結束時舉盾準備接階段 2
+                if (this.retreatTicks <= 3 && !this.mob.isUsingItem() && this.mob.getOffhandItem().is(Items.SHIELD)) {
+                    this.mob.startUsingItem(InteractionHand.OFF_HAND);
+                    this.shieldTicks = 10 + this.mob.getRandom().nextInt(20);; 
+                }
             }
 
-            // 後退快結束時，順便把盾牌舉起來
-            if (this.retreatTicks <= 5 && !this.mob.isUsingItem()) {
-                this.mob.startUsingItem(InteractionHand.OFF_HAND);
-                this.shieldTicks = 25; // 舉盾維持 1.25 秒
-            }
         } else if (this.shieldTicks > 0) {
-            // 【階段 2】：舉盾格擋
+            // =================【 舉盾階段 】=================
             this.shieldTicks--;
-            // 格擋時以較慢的速度逼近目標，維持防禦架勢
-            this.mob.getNavigation().moveTo(target, 0.5D);
+            
+            if (isRiding) {
+                // 🐎 騎兵舉盾：馬匹減速原地待命（0.2D），民兵安心舉盾格擋怪物的反擊
+                net.minecraft.world.entity.PathfinderMob vehicleMob = (net.minecraft.world.entity.PathfinderMob) this.mob.getVehicle();
+                vehicleMob.getNavigation().moveTo(target, 0.3D);
+            } else {
+                // 🏃‍♂️ 步兵舉盾：原來的慢速格擋逼近
+                this.mob.getNavigation().moveTo(target, 0.2D);
+            }
             
             if (this.shieldTicks == 0) {
-                this.mob.stopUsingItem(); // 時間到，放下盾牌
+                this.mob.stopUsingItem(); 
             }
+
         } else {
-            // 【階段 3】：衝鋒進攻
-            this.mob.getNavigation().moveTo(target, 1.2D);
+            // =================【 衝鋒進攻階段 】=================
+            if (isRiding) {
+                // 🐎 騎兵衝鋒：命令戰馬高速衝向目標
+                net.minecraft.world.entity.PathfinderMob vehicleMob = (net.minecraft.world.entity.PathfinderMob) this.mob.getVehicle();
+                vehicleMob.getNavigation().moveTo(target, 1.8D);
+            } else {
+                // 🏃‍♂️ 步兵衝鋒
+                this.mob.getNavigation().moveTo(target, 0.85D);
+            }
             
             // 進入攻擊距離且冷卻完畢
-            if (distanceSq <= attackReach && this.attackCooldown <= 0) {
-                // 揮刀砍擊！
+            if (distanceSq <= attackReach && this.attackCooldown <= 0 && this.mob.getSensing().hasLineOfSight(target)) {
                 this.mob.swing(InteractionHand.MAIN_HAND);
-                if (this.mob.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                if (this.mob.level() instanceof ServerLevel serverLevel) {
                     this.mob.doHurtTarget(serverLevel, target);
                 }
                 
-                // 觸發循環
-                this.attackCooldown = 20; // 攻擊冷卻 1 秒
-                this.retreatTicks = 12;   // 砍完後退 0.6 秒 (物理推力下 12 tick 就很夠了)
+                // 核心冷卻觸發
+                if (this.mob.getMainHandItem().has(net.minecraft.core.component.DataComponents.KINETIC_WEAPON)) {
+                    this.attackCooldown = 20; // 攻擊冷卻 1 秒
+                } else if (this.mob.getMainHandItem().has(net.minecraft.core.component.DataComponents.WEAPON)) {
+                    this.attackCooldown = 12.5D; // 攻擊冷卻 1 秒
+                }
+                
+
+                if (isRiding) {
+                    if (this.mob.getRandom().nextBoolean()) {
+                        // 戰術 A：只撤退，不舉盾
+                        this.retreatTicks = 15 + this.mob.getRandom().nextInt(10); ; 
+                        this.shieldTicks = 0;
+                    } else {
+                        // 戰術 B：只舉盾，不撤退
+                        if (this.mob.getOffhandItem().is(Items.SHIELD)) {
+                            this.mob.startUsingItem(InteractionHand.OFF_HAND);
+                            this.shieldTicks = 20; // 舉盾 1 秒
+                        }
+                        this.retreatTicks = 0;
+                    }
+                } else {
+                    // 🏃‍♂️ 步兵維持原樣
+                    if (this.mob.getMainHandItem().has(net.minecraft.core.component.DataComponents.KINETIC_WEAPON)) {
+                        // 長槍兵戳完後只進行短暫的微調（3-7 tick），保留更多衝鋒衝勁
+                        this.retreatTicks = 3 + this.mob.getRandom().nextInt(5);
+                    } else {
+                        // 鐵劍兵維持原有的長時間撤退與舉盾準備
+                        this.retreatTicks = 1 + this.mob.getRandom().nextInt(25);
+                    }
+                    this.shieldTicks = 0;
+                    this.strafeDirection = this.mob.getRandom().nextBoolean() ? 0.7D : -0.7D;
+                }
             }
         }
+    }
+    private double getAttackReachSqr(LivingEntity target) {
+       
+        if (this.mob.getMainHandItem().has(net.minecraft.core.component.DataComponents.KINETIC_WEAPON)) {
+            return  12.0D; 
+        }
+        return 7.5D; 
     }
 }

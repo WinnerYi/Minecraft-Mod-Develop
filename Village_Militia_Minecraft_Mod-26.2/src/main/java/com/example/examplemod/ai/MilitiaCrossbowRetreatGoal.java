@@ -3,19 +3,20 @@ package com.example.examplemod.ai;
 import com.example.examplemod.VillageMilitiaEntity;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.server.level.ServerLevel;
 import java.util.EnumSet;
 
 public class MilitiaCrossbowRetreatGoal extends Goal {
     private final VillageMilitiaEntity mob;
-    private int sideDirection = 0;
+    private double sideDirection = 0.0D;
     private int attackDelay = 0;
 
     public MilitiaCrossbowRetreatGoal(VillageMilitiaEntity mob) {
         this.mob = mob;
-        // 🌟 接管移動與視線
         this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
     }
 
@@ -28,7 +29,8 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
 
     @Override
     public void start() {
-        this.sideDirection = this.mob.getRandom().nextBoolean() ? 1 : -1;
+        double randomFactor = 0.55D + this.mob.getRandom().nextDouble() * 0.3D;
+        this.sideDirection = this.mob.getRandom().nextBoolean() ? randomFactor : -randomFactor;
         this.attackDelay = 0;
     }
 
@@ -36,6 +38,9 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
     public void stop() {
         this.mob.stopUsingItem();
         this.mob.getNavigation().stop();
+        if (this.mob.getVehicle() instanceof PathfinderMob vehicleMob) {
+            vehicleMob.getNavigation().stop();
+        }
     }
 
     @Override
@@ -48,69 +53,86 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
         LivingEntity target = this.mob.getTarget();
         if (target == null) return;
 
-        // 1. 眼神與身體死死鎖定敵人（維持弩的瞄準角度）
-        this.mob.getLookControl().setLookAt(target, 100.0F, 100.0F);
-        this.mob.setYRot(this.mob.yHeadRot);
-        this.mob.yBodyRot = this.mob.yHeadRot;
+        this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
 
         ItemStack crossbow = this.mob.getMainHandItem();
         boolean isCharged = CrossbowItem.isCharged(crossbow);
-
-        // 🛑 切斷尋路
-        this.mob.getNavigation().stop();
+        boolean isRiding = this.mob.isPassenger() && this.mob.getVehicle() instanceof PathfinderMob;
 
         if (!isCharged) {
-            // 🔄 【狀態：換彈中】
             if (!this.mob.isUsingItem()) {
-                // 如果還沒開始拉弦，立刻開始裝彈
                 this.mob.startUsingItem(InteractionHand.MAIN_HAND);
             } else {
-                // 🌟 完美避開 protected 方法：
-                // 我們什麼都不用呼叫！因為 startUsingItem 之後，Minecraft 的 LivingEntity.aiStep() 
-                // 本身每 tick 就會自動幫我們更新弩的拉弦進度與動畫。
-                // 我們只需要在這邊監聽：一旦拉弦時間到了，就手動幫他放開，觸發自動裝填！
                 if (this.mob.getTicksUsingItem() >= CrossbowItem.getChargeDuration(crossbow, this.mob)) {
-                    this.mob.releaseUsingItem(); // 模擬放開右鍵，原版會自動把弩刷成已裝填
+                    this.mob.releaseUsingItem(); 
                 }
             }
-            if (!this.mob.isInWater() && !this.mob.isInLava()) {
-                double deltaX = this.mob.getX() - target.getX();
-                double deltaZ = this.mob.getZ() - target.getZ();
-                double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 
-                if (distance > 0) {
-                    double backX = deltaX / distance;
-                    double backZ = deltaZ / distance;
-                    double sideX = -backZ * this.sideDirection;
-                    double sideZ = backX * this.sideDirection;
-
-                    double speed = 0.09D; 
-                    double moveX = (backX + sideX * 0.8) * speed;
-                    double moveZ = (backZ + sideZ * 0.8) * speed;
-
-                    this.mob.setDeltaMovement(moveX, this.mob.getDeltaMovement().y, moveZ);
+            if (isRiding) {
+                PathfinderMob vehicleMob = (PathfinderMob) this.mob.getVehicle();
+                
+                if (this.mob.tickCount % 5 == 0) {
+                    
+                    int randomDistance = 7 + this.mob.getRandom().nextInt(15);
+                    net.minecraft.world.phys.Vec3 retreatPos = net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(
+                        vehicleMob, randomDistance, 5, target.position()
+                    );
+                    if (retreatPos != null) {
+                        vehicleMob.getNavigation().moveTo(retreatPos.x, retreatPos.y, retreatPos.z, 1.7D);
+                    }
                 }
+            } else {
+                this.mob.getNavigation().stop();
+                if (!this.mob.isInWater() && !this.mob.isInLava()) {
+                    double deltaX = this.mob.getX() - target.getX();
+                    double deltaZ = this.mob.getZ() - target.getZ();
+                    double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 
+                    if (distance > 0) {
+                        double backX = deltaX / distance;
+                        double backZ = deltaZ / distance;
+                        double sideX = -backZ * this.sideDirection;
+                        double sideZ = backX * this.sideDirection;
+
+                        double speed = 0.06D; 
+                        double moveX = (backX + sideX * 0.8) * speed;
+                        double moveZ = (backZ + sideZ * 0.8) * speed;
+
+                        this.mob.setDeltaMovement(moveX, this.mob.getDeltaMovement().y, moveZ);
+                        this.mob.hurtMarked = true;
+                    }
+                }
             }
-            // 【戰術斜後退物理走位】
             
         } else {
-            // 🎯 【狀態：裝填完畢，準備射擊】
             this.mob.stopUsingItem(); 
+
+            if (isRiding) {
+                PathfinderMob vehicleMob = (PathfinderMob) this.mob.getVehicle();
+                vehicleMob.getNavigation().stop();
+            } else {
+                this.mob.getNavigation().stop();
+            }
             
             if (this.attackDelay > 0) {
                 this.attackDelay--;
             } else {
-                if (this.mob.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                if (this.mob.level() instanceof ServerLevel serverLevel) {
                     if (crossbow.getItem() instanceof CrossbowItem crossbowItem) {
-                        crossbowItem.performShooting(serverLevel, this.mob, InteractionHand.MAIN_HAND, crossbow, 1.6F, 1.0F, target);
+                       
+                        float randomInaccuracy = 0.6F + this.mob.getRandom().nextFloat() * 0.8F;
+                        
+                        crossbowItem.performShooting(serverLevel, this.mob, InteractionHand.MAIN_HAND, crossbow, 1.6F, randomInaccuracy, target);
                     }
-                    // 發射後清空充能組件
                     crossbow.set(net.minecraft.core.component.DataComponents.CHARGED_PROJECTILES, net.minecraft.world.item.component.ChargedProjectiles.EMPTY);
                 }
                 
-                this.sideDirection = this.mob.getRandom().nextBoolean() ? 1 : -1;
-                this.attackDelay = 25; 
+                
+                double randomFactor = 0.55D + this.mob.getRandom().nextDouble() * 0.3D;
+                this.sideDirection = this.mob.getRandom().nextBoolean() ? randomFactor : -randomFactor;
+                
+                
+                this.attackDelay = 20 + this.mob.getRandom().nextInt(16); 
             }
         }
     }

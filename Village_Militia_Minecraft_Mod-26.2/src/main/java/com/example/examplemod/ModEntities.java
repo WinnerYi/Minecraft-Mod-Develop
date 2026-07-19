@@ -18,7 +18,7 @@ public class ModEntities {
     public static final Supplier<EntityType<VillageMilitiaEntity>> VILLAGE_MILITIA =
         ENTITY_TYPES.register("village_militia", () -> 
             EntityType.Builder.of(VillageMilitiaEntity::new, MobCategory.CREATURE)
-                .sized(0.6F, 1.95F) // 設定碰撞箱大小（跟村民差不多高）
+                .sized(0.6F, 1.95F) // 碰撞箱大小（almost same as 村民）
                 .build(ResourceKey.create(Registries.ENTITY_TYPE, Identifier.fromNamespaceAndPath(ExampleMod.MODID, "village_militia")))
         );
 }

@@ -1,16 +1,31 @@
 package com.example.examplemod;
 
+import java.util.List;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.monster.illager.AbstractIllager;
 import net.minecraft.world.entity.monster.Ravager;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+
 import java.util.EnumSet;
+
 
 @EventBusSubscriber(modid = ExampleMod.MODID)
 public class ModEntityEvents {
@@ -81,6 +96,88 @@ public class ModEntityEvents {
         // 🦏 3. 讓劫掠獸主動打守衛
         if (event.getEntity() instanceof Ravager ravager) {
             ravager.targetSelector.addGoal(1, new ForceTargetGuardGoal(ravager));
+        }
+    }
+
+
+    @SubscribeEvent
+    public static void onVillagerInteract(PlayerInteractEvent.EntityInteract event) {
+        // 1. 確保只在伺服器端處理邏輯，且玩家點擊的是主手
+        if (event.getLevel().isClientSide() || event.getHand() != event.getEntity().getUsedItemHand()) {
+            return;
+        }
+
+        net.minecraft.world.entity.player.Player player = event.getEntity();
+        ItemStack mainHandItem = player.getMainHandItem();
+        
+        // 🌟 條件前置檢查：玩家必須【處於潛行狀態 (Shift)】且【手上拿著鐵劍】
+        if (player.isShiftKeyDown() && mainHandItem.is(Items.IRON_SWORD)) {
+            // 2. 檢查玩家點擊的實體是不是村民
+            if (event.getTarget() instanceof Villager villager) {
+
+                boolean isNone = villager.getVillagerData().profession().is(VillagerProfession.NONE);
+               
+                if (isNone) {
+                     
+                // 3. 核心判定：檢查村民是不是「失業/無職業」狀態 (NONE)
+                    ServerLevel serverLevel = (ServerLevel) event.getLevel();
+                    BlockPos spawnPos = villager.blockPosition();
+
+                    // 4. 建立你的民兵實體
+                    VillageMilitiaEntity militia = ModEntities.VILLAGE_MILITIA.get().create(
+                        serverLevel, 
+                        null,                    // PostSpawnProcessor (不需要特殊處理程序，傳 null)
+                        spawnPos,                // BlockPos (生成座標)
+                        net.minecraft.world.entity.EntitySpawnReason.SPAWNER, // EntitySpawnReason (生成原因)
+                        false,                   // boolean (是否為原本的「根據歷史載入」)
+                        false                    // boolean (是否強制對齊方塊中心)
+                    );
+                    if (militia != null) {
+                        // 將民兵移到村民當前的位置，並複製村民的角度
+                        militia.setPos(villager.getX(), villager.getY(), villager.getZ());
+                        // 2. 設定旋轉角度
+                        militia.setYRot(villager.getYRot());
+                        militia.setXRot(villager.getXRot());
+                        militia.setYHeadRot(villager.getYRot());
+                        serverLevel.addFreshEntity(militia);
+                        villager.discard();
+
+                        // 🔊 加上震撼的音效回饋（村民受傷加上裝甲裝備聲）
+                        serverLevel.playSound(null, spawnPos, SoundEvents.VILLAGER_YES, SoundSource.NEUTRAL, 1.0F, 0.8F);
+                        
+                        // 6. 設定右鍵互動成功，阻止原版交易選單與揮劍攻擊動作
+                        event.setCancellationResult(InteractionResult.SUCCESS);
+                        event.setCanceled(true);
+                    }
+                }
+            }
+        }
+    }
+
+    @net.neoforged.bus.api.SubscribeEvent
+    public static void onVillageMembersHurt(net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        net.minecraft.world.entity.LivingEntity victim = event.getEntity();
+        
+        // 1. 檢查被打的是不是村民或鐵巨人
+        if (victim instanceof Villager || victim instanceof IronGolem) {
+            
+            // 🌟 在 LivingIncomingDamageEvent 中，獲取傷害來源的方法是 event.getSource()
+            if (event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker) {
+                
+                // 3. 搜尋受害者周圍 32 格內的所有民兵
+                net.minecraft.world.phys.AABB alertArea = victim.getBoundingBox().inflate(32.0D);
+                java.util.List<VillageMilitiaEntity> nearbyMilitia = victim.level().getEntitiesOfClass(
+                    VillageMilitiaEntity.class, 
+                    alertArea
+                );
+                
+                // 4. 讓所有附近的民兵把兇手設為第一攻擊目標
+                for (VillageMilitiaEntity militia : nearbyMilitia) {
+                    if (militia.getTarget() == null || militia.getTarget() != attacker) {
+                        militia.setTarget(attacker);
+                    }
+                }
+            }
         }
     }
 }
