@@ -31,7 +31,7 @@ import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.AABB;
 
-// 🌟 移除了不必要的 MenuProvider 介面
+
 public class VillageMilitiaEntity extends Pillager {
     public static boolean checkMilitiaSpawnRules(
         EntityType<? extends Mob> type, 
@@ -177,7 +177,7 @@ public class VillageMilitiaEntity extends Pillager {
     @Override
     protected net.minecraft.sounds.SoundEvent getDeathSound() { return net.minecraft.sounds.SoundEvents.VILLAGER_DEATH; }
 
-    // ================== 【 右鍵智慧換裝與互動機制 】 ==================
+    //右鍵智慧換裝與互動機制 
     @Override
     public net.minecraft.world.InteractionResult mobInteract(Player player, net.minecraft.world.InteractionHand hand) {
 
@@ -198,7 +198,7 @@ public class VillageMilitiaEntity extends Pillager {
                     slotToEquip = equippable.slot(); // 使用你剛查到的 equippable.slot() 方法
                 }
             }
-            // 3. ⚔️ 武器與工具判定
+            // 武器與工具判定
             else if (itemInHand.isDamageableItem() || itemInHand.getItem() instanceof net.minecraft.world.item.CrossbowItem) {
                 slotToEquip = EquipmentSlot.MAINHAND;
             }
@@ -231,7 +231,7 @@ public class VillageMilitiaEntity extends Pillager {
 
         if (hand == net.minecraft.world.InteractionHand.MAIN_HAND) {
         
-        // 🌟 核心判定：玩家必須處於【潛行狀態 (Shift)】且【雙手空空】
+        // 
         if (player.isShiftKeyDown() && player.getMainHandItem().isEmpty() && player.getOffhandItem().isEmpty()) {
             
             // 如果民兵目前正騎在馬上（有坐騎）
@@ -260,7 +260,7 @@ public class VillageMilitiaEntity extends Pillager {
         //         String modeName = !currentMode ? "§a【跟隨模式】(形影不離)" : "§e【巡邏模式】(留守原地)";
         //         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7[民兵守衛] 感謝您的綠寶石！任務變更為： " + modeName));
                 
-        //         // 2. 💸 扣除玩家手上的綠寶石一顆（生存模式才扣，創造模式不扣）
+        //      
         //         if (!player.getAbilities().instabuild) {
         //             itemInHand.shrink(1);
         //         }
@@ -289,7 +289,7 @@ public class VillageMilitiaEntity extends Pillager {
         super.aiStep();
         
 
-        // 🛡️ 安全防線：所有伺服器端邏輯統一在這裡執行
+       
         if (!this.level().isClientSide()) {
             
             // 1. 【原版收盾邏輯】如果 AI Goal 結束或失去目標，確保安全放下盾牌
@@ -299,7 +299,7 @@ public class VillageMilitiaEntity extends Pillager {
                 }
             }
 
-            // 2. 🌟【重裝戰馬騎乘與卸載邏輯】
+            // 【重裝戰馬騎乘與卸載邏輯】
             if (!this.isPassenger()) {
                 // =================【 上馬邏輯 】=================
                 //  每 20 ticks (1秒) 檢查一次周圍
@@ -330,7 +330,7 @@ public class VillageMilitiaEntity extends Pillager {
                 if (this.getVehicle() instanceof net.minecraft.world.entity.animal.equine.Horse horse) {
                     if (this.tickCount % 20 == 0) {
                         if (!horse.isAlive()) {
-                            // 📯 民兵立刻跳下馬！
+                            
                             this.stopRiding();
                         }
                     }
@@ -368,9 +368,9 @@ public class VillageMilitiaEntity extends Pillager {
     public void rideTick() {
         super.rideTick();
         
-        // 🐎 當民兵正在騎乘，且坐騎是馬的時候
+        
         if (this.getVehicle() instanceof net.minecraft.world.entity.animal.equine.Horse) {
-            // 🌟 強行干預：把民兵目前的 Y 軸座標，直接往下移動 0.25 格，強行修正浮空！
+            // 把民兵目前的 Y 軸座標，直接往下移動 0.25 格，強行修正浮空！
             this.setPos(this.getX(), this.getY() - 0.60D, this.getZ());
         }
     }
