@@ -71,15 +71,15 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
             this.attackCooldown = Math.max(0, this.attackCooldown - 1.0D);
         }
 
-        // 🐎 檢查目前是不是騎乘狀態
+       
         boolean isRiding = this.mob.isPassenger() && this.mob.getVehicle() instanceof net.minecraft.world.entity.PathfinderMob;
 
-        // 🔄 戰鬥拉扯狀態機
+        //  戰鬥拉扯狀態
         if (this.retreatTicks > 0) {
             this.retreatTicks--;
 
             if (isRiding) {
-                // 🐎 騎兵撤退：戰馬調頭全速奔跑（此時不舉盾，專心控馬）
+                //  騎兵撤退：戰馬調頭全速奔跑（此時不舉盾，專心控馬）
                 net.minecraft.world.entity.PathfinderMob vehicleMob = (net.minecraft.world.entity.PathfinderMob) this.mob.getVehicle();
                 net.minecraft.world.phys.Vec3 retreatPos = net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(
                     vehicleMob, 8, 4, target.position()
@@ -88,7 +88,7 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
                     vehicleMob.getNavigation().moveTo(retreatPos.x, retreatPos.y, retreatPos.z, 1.4D);
                 }
             } else {
-                // 🏃‍♂️ 步兵撤退：維持你原本的物理斜向推力
+                // 步兵撤退：維持你原本的物理斜向推力
                 this.mob.getNavigation().stop();
                 double deltaX = this.mob.getX() - target.getX();
                 double deltaZ = this.mob.getZ() - target.getZ();
@@ -100,7 +100,7 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
                     double strafeX = backZ;
                     double strafeZ = -backX;
 
-                    double backSpeed = 0.1D;    
+                    double backSpeed = 0.09D;    
                     double strafeSpeed = 0.1D;  
 
                     double vecX = (backX * backSpeed) + (strafeX * strafeSpeed * this.strafeDirection);
@@ -122,11 +122,10 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
             this.shieldTicks--;
             
             if (isRiding) {
-                // 🐎 騎兵舉盾：馬匹減速原地待命（0.2D），民兵安心舉盾格擋怪物的反擊
                 net.minecraft.world.entity.PathfinderMob vehicleMob = (net.minecraft.world.entity.PathfinderMob) this.mob.getVehicle();
                 vehicleMob.getNavigation().moveTo(target, 0.3D);
             } else {
-                // 🏃‍♂️ 步兵舉盾：原來的慢速格擋逼近
+               
                 this.mob.getNavigation().moveTo(target, 0.2D);
             }
             
@@ -135,9 +134,7 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
             }
 
         } else {
-            // =================【 衝鋒進攻階段 】=================
             if (isRiding) {
-                // 🐎 騎兵衝鋒：命令戰馬高速衝向目標
                 net.minecraft.world.entity.PathfinderMob vehicleMob = (net.minecraft.world.entity.PathfinderMob) this.mob.getVehicle();
                 vehicleMob.getNavigation().moveTo(target, 1.8D);
             } else {
@@ -147,8 +144,10 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
             
             // 進入攻擊距離且冷卻完畢
             if (distanceSq <= attackReach && this.attackCooldown <= 0 && this.mob.getSensing().hasLineOfSight(target)) {
-                this.mob.swing(InteractionHand.MAIN_HAND);
+                this.mob.stopUsingItem();
+                this.mob.swing(InteractionHand.MAIN_HAND, true);
                 if (this.mob.level() instanceof ServerLevel serverLevel) {
+                    serverLevel.broadcastEntityEvent(this.mob, (byte) 4);
                     this.mob.doHurtTarget(serverLevel, target);
                 }
                 
@@ -177,10 +176,10 @@ public class MilitiaSwordAndShieldAttackGoal extends Goal {
                     // 🏃‍♂️ 步兵維持原樣
                     if (this.mob.getMainHandItem().has(net.minecraft.core.component.DataComponents.KINETIC_WEAPON)) {
                         // 長槍兵戳完後只進行短暫的微調（3-7 tick），保留更多衝鋒衝勁
-                        this.retreatTicks = 3 + this.mob.getRandom().nextInt(5);
+                        this.retreatTicks = 3 + this.mob.getRandom().nextInt(25);
                     } else {
                         // 鐵劍兵維持原有的長時間撤退與舉盾準備
-                        this.retreatTicks = 1 + this.mob.getRandom().nextInt(25);
+                        this.retreatTicks = 1 + this.mob.getRandom().nextInt(20);
                     }
                     this.shieldTicks = 0;
                     this.strafeDirection = this.mob.getRandom().nextBoolean() ? 0.7D : -0.7D;
