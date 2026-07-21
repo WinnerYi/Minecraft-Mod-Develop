@@ -17,6 +17,7 @@ import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.npc.villager.AbstractVillager;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.entity.raid.Raider;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.monster.illager.AbstractIllager;
@@ -91,14 +92,10 @@ public class ModEntityEvents {
 
         // 🪓 2. 讓整支災厄村民大軍（Pillager, Vindicator, Evoker...）主動打守衛
         // 💡 拋棄被 final 擋死的 NearestAttackableTargetGoal，改用我們不受限制的空間雷達！
-        if (event.getEntity() instanceof AbstractIllager illager) {
-            illager.targetSelector.addGoal(1, new ForceTargetGuardGoal(illager));
+        if (event.getEntity() instanceof Raider raider) {
+            raider.targetSelector.addGoal(1, new ForceTargetGuardGoal(raider));
         }
 
-        // 🦏 3. 讓劫掠獸主動打守衛
-        if (event.getEntity() instanceof Ravager ravager) {
-            ravager.targetSelector.addGoal(1, new ForceTargetGuardGoal(ravager));
-        }
     }
 
 
@@ -160,7 +157,7 @@ public class ModEntityEvents {
     public static void onVillageMembersHurt(net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
         net.minecraft.world.entity.LivingEntity victim = event.getEntity();
 
-        if (victim instanceof AbstractVillager || victim instanceof AbstractGolem) {
+        if (victim instanceof AbstractVillager || victim instanceof IronGolem) {
             if (event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker) {
                 
                 // 3. 搜尋受害者周圍 32 格內的所有民兵

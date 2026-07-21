@@ -25,6 +25,7 @@ import net.minecraft.world.entity.monster.illager.Pillager;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.raid.Raider;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ShieldItem;
@@ -141,7 +142,6 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
        
        // this.goalSelector.addGoal(1, new RangedCrossbowAttackGoal<>(this, 1.0D, 8.0F));
         this.targetSelector.addGoal(1, new MilitiaAttackTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Zombie.class, true)); 
         this.goalSelector.addGoal(2, new com.example.examplemod.ai.MilitiaCrossbowRetreatGoal(this));
         this.goalSelector.addGoal(2, new com.example.examplemod.ai.MilitiaSwordAndShieldAttackGoal(this));
         this.goalSelector.addGoal(1, new MilitiaBowRetreatGoal(this));
@@ -495,7 +495,10 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
         }
     }
 
-    // ================== 【 攻擊目標目標選擇AI 】 ==================
+
+
+
+    // 【 攻擊目標目標選擇AI !!】
     public static class MilitiaAttackTargetGoal extends Goal {
         private final Mob mob;
         private final double range = 16.0D;
@@ -505,7 +508,7 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
             this.setFlags(EnumSet.of(Goal.Flag.TARGET));
         }
 
-        @Override
+        @Override // 攻擊判定（important）
         public boolean canUse() {
             if (this.mob.getTarget() != null && this.mob.getTarget().isAlive()) {
                 return false;
@@ -519,10 +522,10 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
                     if (!entity.isAlive() || !this.mob.hasLineOfSight(entity)) {
                         return false;
                     }
-                    if (entity instanceof Zombie || entity instanceof net.minecraft.world.entity.monster.Ravager) {
+                    if (entity instanceof Zombie ) {
                         return true;
                     }
-                    if (entity instanceof net.minecraft.world.entity.monster.illager.AbstractIllager) {
+                    if (entity instanceof Raider) {
                         return !(entity instanceof VillageMilitiaEntity);
                     }
                     return false;
@@ -530,6 +533,8 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
             );
 
             if (!enemies.isEmpty()) {
+                enemies.sort((e1, e2) -> Double.compare(this.mob.distanceToSqr(e1), this.mob.distanceToSqr(e2)));
+    
                 this.mob.setTarget(enemies.get(0));
                 return true;
             }

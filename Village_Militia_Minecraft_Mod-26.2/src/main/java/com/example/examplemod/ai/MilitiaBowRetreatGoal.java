@@ -104,14 +104,14 @@ public class MilitiaBowRetreatGoal extends Goal {
                 );
 
                 if (safeRetreatPos != null) {
-                    double baseSpeed = isRiding ? 1.15D : 0.65D;
+                    double baseSpeed = isRiding ? 1.25D : 0.65D;
                     double finalSpeed = baseSpeed * this.moveSpeedFactor;
                     
                     movingEntity.getNavigation().moveTo(safeRetreatPos.x, safeRetreatPos.y, safeRetreatPos.z, finalSpeed);
                 }
             }
 
-            // 🦘 補回隨機跳躍（僅限非騎乘狀態）
+            //  隨機跳躍（僅限非騎乘狀態）
             if (!isRiding && this.mob.onGround() && !this.mob.getNavigation().isDone()) {
                 if (this.mob.getRandom().nextFloat() < 0.06F) {
                     this.mob.getJumpControl().jump();
@@ -119,9 +119,8 @@ public class MilitiaBowRetreatGoal extends Goal {
             }
         }
 
-        // ----------------------------------------------------
+       
         // 發射邏輯
-        // ----------------------------------------------------
         if (ticksHeld >= this.targetChargeTicks) {
             if (this.mob.level() instanceof ServerLevel serverLevel) {
                 float power = BowItem.getPowerForTime(ticksHeld);

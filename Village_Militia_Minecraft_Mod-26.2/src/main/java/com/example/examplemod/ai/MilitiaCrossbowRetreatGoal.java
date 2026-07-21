@@ -102,7 +102,6 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
                 this.mob.startUsingItem(InteractionHand.MAIN_HAND);
             }
 
-            // 🎯 使用安全 Navigation 尋路後撤（防懸崖）
             this.pathUpdateTimer++;
             if (this.pathUpdateTimer >= 8 || movingEntity.getNavigation().isDone()) {
                 this.pathUpdateTimer = 0;
@@ -116,7 +115,6 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
                 );
 
                 if (safeRetreatPos != null) {
-                    // 蹲下移動速度調整（基礎倍率約 0.95D / 騎馬 1.15D）
                     double baseSpeed = isRiding ? 1.15D : 0.45D;
                     double finalSpeed = baseSpeed * this.moveSpeedFactor;
                     movingEntity.getNavigation().moveTo(safeRetreatPos.x, safeRetreatPos.y, safeRetreatPos.z, finalSpeed);
@@ -161,7 +159,7 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
      * 重置並生成下一輪攻擊的隨機數值
      */
     private void resetRandomParams() {
-        this.shootDelay = 4 + this.mob.getRandom().nextInt(9);
+        this.shootDelay = 9 + this.mob.getRandom().nextInt(15);
         this.chargeDelay = 2 + this.mob.getRandom().nextInt(7);
         this.moveSpeedFactor = 0.8D + this.mob.getRandom().nextDouble() * 0.35D;
         this.strafeTimer = 0;
