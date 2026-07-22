@@ -129,11 +129,7 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
             this.mob.setChargingCrossbow(false);
             this.mob.stopUsingItem(); 
 
-            // 🥷 裝填完成準備開槍，依然保持蹲下瞄準姿態
-            if (!isRiding) {
-                this.mob.setShiftKeyDown(true);
-            }
-
+           
             // 瞄準時停止移動以確保射擊精度
             movingEntity.getNavigation().stop();
 

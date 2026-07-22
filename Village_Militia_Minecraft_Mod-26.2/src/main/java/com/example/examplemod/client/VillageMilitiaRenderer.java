@@ -14,15 +14,19 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 
 public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEntity, VillageMilitiaRenderer.MyRenderState, HumanoidModel<VillageMilitiaRenderer.MyRenderState>> {
-
+    
     private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(
         ExampleMod.MODID,
         "textures/entity/village_millita.png"
     );
 
     public VillageMilitiaRenderer(EntityRendererProvider.Context context) {
-        super(context, new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), 0.5F);
-
+        super(
+            context, 
+            new VillageMilitiaModel(context.bakeLayer(ModelLayers.PLAYER)), 
+            new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), 
+            0.5F
+        );
         var armorModelSet = net.minecraft.client.renderer.entity.ArmorModelSet.bake(
             ModelLayers.PLAYER_ARMOR,
             context.getModelSet(),
@@ -41,8 +45,9 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
     }
 
     public static class MyRenderState extends HumanoidRenderState {
+        public boolean isCelebrating = false;
         public boolean isHoldingCrossbow = false;
-        public boolean isHoldingBow = false; // 🏹 新增弓箭手持標記
+        public boolean isHoldingBow = false; 
         public boolean isChargingCrossbow = false;
         public boolean isAggressive = false;
     }
@@ -55,6 +60,7 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
     @Override
     public void extractRenderState(VillageMilitiaEntity entity, MyRenderState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
+        state.isCelebrating = entity.isCelebrating();
         
         // 攻擊/揮手動畫計算
         if (entity.swinging) {
@@ -79,8 +85,6 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
         // ----------------------------------------------------
         // 雙手姿勢（ArmPose）分流控制
         // ----------------------------------------------------
-        
-        // 1. 弩（Crossbow）邏輯
         if (state.isHoldingCrossbow) {
             if (entity.isUsingItem() && entity.getUseItem().getItem() instanceof CrossbowItem) {
                 state.isUsingItem = true;
@@ -90,6 +94,7 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
             }
             boolean isCharged = CrossbowItem.isCharged(mainHand);
 
+            
             if (state.isChargingCrossbow || entity.isUsingItem()) {
                 state.leftArmPose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
                 state.rightArmPose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
@@ -110,7 +115,6 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
                 state.isUsingItem = true;
                 state.useItemHand = entity.getUsedItemHand();
                 
-                // 🌟 設定為 BOW_AND_ARROW，Minecraft 原生模型會自動播放雙手舉弓搭箭動畫
                 state.rightArmPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                 state.leftArmPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             } else {
@@ -144,6 +148,8 @@ public class VillageMilitiaRenderer extends HumanoidMobRenderer<VillageMilitiaEn
             }
         }
     }
+
+    
 
     @Override
     public Identifier getTextureLocation(MyRenderState state) {

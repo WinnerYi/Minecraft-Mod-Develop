@@ -12,7 +12,6 @@ import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.animal.golem.IronGolem;
-import net.minecraft.world.entity.animal.golem.SnowGolem;
 import net.minecraft.world.entity.animal.wolf.Wolf;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -42,6 +41,7 @@ import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.storage.ValueInput;
@@ -51,6 +51,7 @@ import net.minecraft.world.phys.AABB;
 
 public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttackMob, InventoryCarrier{
     private final SimpleContainer inventory = new SimpleContainer(5);
+    private int celebrateTicks = 0;
     public static boolean checkMilitiaSpawnRules(
         EntityType<? extends Mob> type, 
         net.minecraft.world.level.ServerLevelAccessor level, 
@@ -62,11 +63,44 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
         return false; 
     }
 
-    
+    @Override
+    protected void registerGoals() {
+        
+        this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new net.minecraft.world.entity.ai.goal.OpenDoorGoal(this, true));
+        // 換彈期間的斜後退蹲下走位 AI（優先級最高）
+       this.targetSelector.addGoal(1, new HurtByTargetGoal(this, VillageMilitiaEntity.class).setAlertOthers());
+       
+       // this.goalSelector.addGoal(1, new RangedCrossbowAttackGoal<>(this, 1.0D, 8.0F));
+        this.targetSelector.addGoal(1, new MilitiaAttackTargetGoal(this));
+        this.goalSelector.addGoal(2, new com.example.examplemod.ai.MilitiaCrossbowRetreatGoal(this));
+        this.goalSelector.addGoal(2, new com.example.examplemod.ai.MilitiaSwordAndShieldAttackGoal(this));
+        this.goalSelector.addGoal(1, new MilitiaBowRetreatGoal(this));
+       
+        this.goalSelector.addGoal(4, new MoveThroughVillageGoal(this, 0.5D, false, 4, () -> false));
+        this.goalSelector.addGoal(4, new MoveTowardsRestrictionGoal(this, 1.0D));
+        
+        this.goalSelector.addGoal(5, new RandomStrollGoal(this, 0.5D));
+
+        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 6.0F));
+        this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
+
+        
+    }
     private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> IS_CHARGING_CROSSBOW = 
         net.minecraft.network.syncher.SynchedEntityData.defineId(VillageMilitiaEntity.class, net.minecraft.network.syncher.EntityDataSerializers.BOOLEAN);
+    
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> IS_CELEBRATING =
+        SynchedEntityData.defineId(VillageMilitiaEntity.class, EntityDataSerializers.BOOLEAN);
 
+    @Override
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        super.defineSynchedData(builder);
+        builder.define(IS_CHARGING_CROSSBOW, false);
+        builder.define(IS_CELEBRATING, false);
+    }
 
+    
     public VillageMilitiaEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
         this.getNavigation().setCanOpenDoors(true);
@@ -85,11 +119,7 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
         return this.isUsingItem() && this.getMainHandItem().getItem() instanceof net.minecraft.world.item.BowItem;
     }
 
-    @Override
-    protected void defineSynchedData(SynchedEntityData.Builder builder) {
-        super.defineSynchedData(builder);
-        builder.define(IS_CHARGING_CROSSBOW, false);
-    }
+    
 
     @Override
     public void performRangedAttack(LivingEntity target, float distanceFactor) {
@@ -122,40 +152,26 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
         return ItemStack.EMPTY;
     }
 
-    
-
 
     @Override
     public SimpleContainer getInventory() {
         return this.inventory;
     }
+    
+    public boolean isCelebrating() {
+        return this.entityData.get(IS_CELEBRATING);
+    }
+
+    public void setCelebrating(boolean celebrating) {
+        this.entityData.set(IS_CELEBRATING, celebrating);
+    }
+   
+    private boolean isHeroNearby() {
+        Player nearestPlayer = this.level().getNearestPlayer(this, 3.0D);
+        return nearestPlayer != null && nearestPlayer.hasEffect(MobEffects.HERO_OF_THE_VILLAGE);
+    }
 
    
-
-    @Override
-    protected void registerGoals() {
-        
-        this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.goalSelector.addGoal(1, new net.minecraft.world.entity.ai.goal.OpenDoorGoal(this, true));
-        // 換彈期間的斜後退蹲下走位 AI（優先級最高）
-       this.targetSelector.addGoal(1, new HurtByTargetGoal(this, VillageMilitiaEntity.class).setAlertOthers());
-       
-       // this.goalSelector.addGoal(1, new RangedCrossbowAttackGoal<>(this, 1.0D, 8.0F));
-        this.targetSelector.addGoal(1, new MilitiaAttackTargetGoal(this));
-        this.goalSelector.addGoal(2, new com.example.examplemod.ai.MilitiaCrossbowRetreatGoal(this));
-        this.goalSelector.addGoal(2, new com.example.examplemod.ai.MilitiaSwordAndShieldAttackGoal(this));
-        this.goalSelector.addGoal(1, new MilitiaBowRetreatGoal(this));
-       
-        this.goalSelector.addGoal(4, new MoveThroughVillageGoal(this, 0.5D, false, 4, () -> false));
-        this.goalSelector.addGoal(4, new MoveTowardsRestrictionGoal(this, 1.0D));
-        
-        this.goalSelector.addGoal(5, new RandomStrollGoal(this, 0.5D));
-
-        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 6.0F));
-        this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
-
-        
-    }
 
    
     @Override
@@ -423,9 +439,8 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
     @Override
     public void rideTick() {
         super.rideTick();
-        // 🐎 當民兵正在騎乘，且坐騎是馬的時候
         if (this.getVehicle() instanceof net.minecraft.world.entity.animal.equine.Horse) {
-            // 🌟 強行干預：把民兵目前的 Y 軸座標，直接往下移動 0.25 格，強行修正浮空！
+            //  強行干預：把民兵目前的 Y 軸座標，直接往下移動 0.25 格，強行修正浮空！
             this.setPos(this.getX(), this.getY() - 0.60D, this.getZ());
         }
     }
@@ -476,6 +491,25 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
                 if (this.isShiftKeyDown()) {
                     this.setPose(net.minecraft.world.entity.Pose.STANDING);
                     this.setShiftKeyDown(false);
+                }
+            }
+        }
+
+
+        if (!this.level().isClientSide()) {
+    // 1. 慶祝計時器倒數
+            if (isCelebrating()) {
+                this.celebrateTicks--;
+                if (this.celebrateTicks <= 0) {
+                    setCelebrating(false);
+                }
+            } 
+            // 2. 沒在慶祝時，才去檢查是否要觸發新的慶祝
+            else if (this.tickCount % 40 == 0 && isHeroNearby()) {
+                // 機率改為 1F (100%) 或你想要的數值
+                if (this.random.nextFloat() < 1F) { 
+                    setCelebrating(true);
+                    this.celebrateTicks = 50; 
                 }
             }
         }
