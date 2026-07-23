@@ -26,7 +26,6 @@ public class MilitiaBowRetreatGoal extends Goal {
 
     public MilitiaBowRetreatGoal(VillageMilitiaEntity mob) {
         this.mob = mob;
-        // 加上 Goal.Flag.JUMP 允許 AI 目標控制跳躍
         this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK, Goal.Flag.JUMP));
     }
 
@@ -81,9 +80,6 @@ public class MilitiaBowRetreatGoal extends Goal {
         int ticksHeld = this.mob.getTicksUsingItem();
         boolean isAimingToShoot = ticksHeld >= (this.targetChargeTicks - 3);
 
-        // ----------------------------------------------------
-        // 🎯 判斷是否騎乘中
-        // ----------------------------------------------------
         boolean isRiding = this.mob.isPassenger() && this.mob.getVehicle() instanceof PathfinderMob;
         PathfinderMob movingEntity = isRiding ? (PathfinderMob) this.mob.getVehicle() : this.mob;
 
@@ -91,35 +87,46 @@ public class MilitiaBowRetreatGoal extends Goal {
         if (isAimingToShoot) {
             movingEntity.getNavigation().stop();
         } else {
-            // 每 10 ticks 更新一次路徑
-            this.pathUpdateTimer++;
-            if (this.pathUpdateTimer >= 10 || movingEntity.getNavigation().isDone()) {
-                this.pathUpdateTimer = 0;
+            double distanceToTarget = movingEntity.distanceTo(target);
 
-                Vec3 safeRetreatPos = DefaultRandomPos.getPosAway(
-                    movingEntity, 
-                    isRiding ? 10 : 7,  // 撤退搜尋距離
-                    4,                 // 垂直高低差限制
-                    target.position()
-                );
-
-                if (safeRetreatPos != null) {
-                    double baseSpeed = isRiding ? 1.25D : 0.65D;
-                    double finalSpeed = baseSpeed * this.moveSpeedFactor;
-                    
-                    movingEntity.getNavigation().moveTo(safeRetreatPos.x, safeRetreatPos.y, safeRetreatPos.z, finalSpeed);
+            //  距離大於 15 格：向前推進靠近目標
+            if (distanceToTarget > 9.0D) {
+                this.pathUpdateTimer++;
+                if (this.pathUpdateTimer >= 10 || movingEntity.getNavigation().isDone()) {
+                    this.pathUpdateTimer = 0;
+                    double baseSpeed = isRiding ? 0.6D : 0.5D;
+                    movingEntity.getNavigation().moveTo(target, baseSpeed * this.moveSpeedFactor);
                 }
-            }
+            } 
+            //  小於 10 格：太近了，往後撤退
+            else if (distanceToTarget <= 10.0D){
+                this.pathUpdateTimer++;
+                if (this.pathUpdateTimer >= 10 || movingEntity.getNavigation().isDone()) {
+                    this.pathUpdateTimer = 0;
 
-            //  隨機跳躍（僅限非騎乘狀態）
-            if (!isRiding && this.mob.onGround() && !this.mob.getNavigation().isDone()) {
-                if (this.mob.getRandom().nextFloat() < 0.06F) {
-                    this.mob.getJumpControl().jump();
+                    Vec3 safeRetreatPos = DefaultRandomPos.getPosAway(
+                        movingEntity, 
+                        isRiding ? 10 : 7, 
+                        4, 
+                        target.position()
+                    );
+
+                    if (safeRetreatPos != null) {
+                        double baseSpeed = isRiding ? 1.25D : 0.65D;
+                        double finalSpeed = baseSpeed * this.moveSpeedFactor;
+                        movingEntity.getNavigation().moveTo(safeRetreatPos.x, safeRetreatPos.y, safeRetreatPos.z, finalSpeed);
+                    }
+                }
+
+                // 隨機跳躍（僅限非騎乘狀態）
+                if (!isRiding && this.mob.onGround() && !this.mob.getNavigation().isDone()) {
+                    if (this.mob.getRandom().nextFloat() < 0.06F) {
+                        this.mob.getJumpControl().jump();
+                    }
                 }
             }
         }
 
-       
         // 發射邏輯
         if (ticksHeld >= this.targetChargeTicks) {
             if (this.mob.level() instanceof ServerLevel serverLevel) {

@@ -2,7 +2,7 @@ package com.example.examplemod;
 import java.util.function.Predicate;
 
 import com.example.examplemod.ai.MilitiaBowRetreatGoal;
-
+import com.example.examplemod.ai.MilitiaAttackTargetGoal;
 
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -39,6 +39,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffects;
@@ -84,8 +85,6 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
 
         this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 6.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
-
-        
     }
     private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> IS_CHARGING_CROSSBOW = 
         net.minecraft.network.syncher.SynchedEntityData.defineId(VillageMilitiaEntity.class, net.minecraft.network.syncher.EntityDataSerializers.BOOLEAN);
@@ -100,6 +99,7 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
         builder.define(IS_CELEBRATING, false);
     }
 
+    
     
     public VillageMilitiaEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -239,11 +239,14 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
     public net.minecraft.world.InteractionResult mobInteract(Player player, net.minecraft.world.InteractionHand hand) {
 
         ItemStack itemInHand = player.getItemInHand(hand);
+        if (this.getTarget() != null && this.getTarget().isAlive()) {
+             return InteractionResult.PASS;
+        }
         
         // 確保在伺服器端處理，且玩家手上拿著東西
         if (player.isShiftKeyDown() && this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
 
-        if (itemInHand.is(net.minecraft.world.item.Items.STICK)) {
+            if (itemInHand.is(net.minecraft.world.item.Items.STICK)) {
                 boolean dropAny = false;
 
                 // 遍歷所有裝備欄位 (MAINHAND, OFFHAND, FEET, LEGS, CHEST, HEAD)
@@ -352,6 +355,8 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
         return super.mobInteract(player, hand);
     }
 
+    
+    
     private int lastHorseCheckTick = 0;
    @Override
     public void aiStep() {
@@ -531,60 +536,4 @@ public class VillageMilitiaEntity extends PathfinderMob implements CrossbowAttac
 
 
 
-
-    // 【 攻擊目標目標選擇AI !!】
-    public static class MilitiaAttackTargetGoal extends Goal {
-        private final Mob mob;
-        private final double range = 16.0D;
-
-        public MilitiaAttackTargetGoal(Mob mob) {
-            this.mob = mob;
-            this.setFlags(EnumSet.of(Goal.Flag.TARGET));
-        }
-
-        @Override // 攻擊判定（important）
-        public boolean canUse() {
-            if (this.mob.getTarget() != null && this.mob.getTarget().isAlive()) {
-                return false;
-            }
-
-            AABB searchBox = this.mob.getBoundingBox().inflate(range, 4.0D, range);
-            List<LivingEntity> enemies = this.mob.level().getEntitiesOfClass(
-                LivingEntity.class,
-                searchBox,
-                entity -> {
-                    if (!entity.isAlive() || !this.mob.hasLineOfSight(entity)) {
-                        return false;
-                    }
-                    if (entity instanceof Zombie ) {
-                        return true;
-                    }
-                    if (entity instanceof Raider) {
-                        return !(entity instanceof VillageMilitiaEntity);
-                    }
-                    return false;
-                }
-            );
-
-            if (!enemies.isEmpty()) {
-                enemies.sort((e1, e2) -> Double.compare(this.mob.distanceToSqr(e1), this.mob.distanceToSqr(e2)));
-    
-                this.mob.setTarget(enemies.get(0));
-                return true;
-            }
-
-            return false;
-        }
-
-        @Override
-        public boolean canContinueToUse() {
-            LivingEntity currentTarget = this.mob.getTarget();
-            if (currentTarget == null || !currentTarget.isAlive()) {
-                return false;
-            }
-            return this.mob.distanceToSqr(currentTarget) <= range * range;
-        }
-
-       
-    }
 }
