@@ -90,16 +90,17 @@ public class MilitiaBowRetreatGoal extends Goal {
             double distanceToTarget = movingEntity.distanceTo(target);
 
             //  距離大於 15 格：向前推進靠近目標
-            if (distanceToTarget > 9.0D) {
+            if (distanceToTarget > 10.0D && this.mob.getMilitiaMode() != VillageMilitiaEntity.MilitiaMode.GUARD) {
                 this.pathUpdateTimer++;
                 if (this.pathUpdateTimer >= 10 || movingEntity.getNavigation().isDone()) {
                     this.pathUpdateTimer = 0;
-                    double baseSpeed = isRiding ? 0.6D : 0.5D;
+                    double baseSpeed = isRiding ? 0.7D : 0.5D;
                     movingEntity.getNavigation().moveTo(target, baseSpeed * this.moveSpeedFactor);
                 }
             } 
             //  小於 10 格：太近了，往後撤退
-            else if (distanceToTarget <= 10.0D){
+            else if (distanceToTarget <= 11.0D && this.mob.getMilitiaMode() != VillageMilitiaEntity.MilitiaMode.GUARD 
+                     || distanceToTarget <= 4.0D && this.mob.getMilitiaMode() == VillageMilitiaEntity.MilitiaMode.GUARD ){
                 this.pathUpdateTimer++;
                 if (this.pathUpdateTimer >= 10 || movingEntity.getNavigation().isDone()) {
                     this.pathUpdateTimer = 0;

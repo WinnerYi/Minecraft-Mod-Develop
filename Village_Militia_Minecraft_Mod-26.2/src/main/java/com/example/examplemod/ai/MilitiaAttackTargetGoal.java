@@ -4,9 +4,7 @@ import com.example.examplemod.VillageMilitiaEntity;
 import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.zombie.Zombie;
-
-import net.minecraft.world.entity.raid.Raider;
+import net.minecraft.world.entity.monster.Monster;
 import java.util.EnumSet;
 import java.util.List;
 import net.minecraft.world.phys.AABB;
@@ -34,11 +32,8 @@ public class MilitiaAttackTargetGoal extends Goal {
                 if (!entity.isAlive() || !this.mob.hasLineOfSight(entity)) {
                     return false;
                 }
-                if (entity instanceof Zombie ) {
+                if (entity instanceof Monster ) {
                     return true;
-                }
-                if (entity instanceof Raider) {
-                    return !(entity instanceof VillageMilitiaEntity);
                 }
                 return false;
             }

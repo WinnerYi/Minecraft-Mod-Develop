@@ -176,4 +176,29 @@ public class ModEntityEvents {
             }
         }
     }
+
+
+
+    @net.neoforged.bus.api.SubscribeEvent
+        public static void onMilitiaHurt(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
+            // 1. 檢查受傷的是不是民兵
+            if (event.getEntity() instanceof VillageMilitiaEntity militia) {
+                // 2. 取得攻擊者（必須是活體生物，例如殭屍、骷髏或玩家）
+                if (event.getSource().getEntity() instanceof net.minecraft.world.entity.LivingEntity attacker) {
+                    
+                    // 3. 搜尋民兵周圍 16 格內的鐵巨人
+                    net.minecraft.world.phys.AABB searchArea = militia.getBoundingBox().inflate(16.0D);
+                    java.util.List<net.minecraft.world.entity.animal.golem.IronGolem> golems = 
+                        militia.level().getEntitiesOfClass(net.minecraft.world.entity.animal.golem.IronGolem.class, searchArea);
+
+                    // 4. 讓附近所有的鐵巨人都把仇恨目標轉向這個攻擊者！
+                    for (net.minecraft.world.entity.animal.golem.IronGolem golem : golems) {
+                        // 確保攻擊者不是鐵巨人自己
+                        if (attacker != golem) {
+                            golem.setTarget(attacker);
+                        }
+                    }
+                }
+            }
+        }
 }

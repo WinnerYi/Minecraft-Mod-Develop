@@ -100,8 +100,8 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
 
             double distanceToTarget = movingEntity.distanceTo(target);
 
-            // 🎯 A. 距離大於 15 格：一邊拉弦，一邊向前推進
-            if (distanceToTarget > 9.0D) {
+            // 🎯 A. 距離大於 9 格：一邊拉弦，一邊向前推進
+            if (distanceToTarget > 10.0D && this.mob.getMilitiaMode() != VillageMilitiaEntity.MilitiaMode.GUARD) {
                 this.pathUpdateTimer++;
                 if (this.pathUpdateTimer >= 8 || movingEntity.getNavigation().isDone()) {
                     this.pathUpdateTimer = 0;
@@ -111,7 +111,9 @@ public class MilitiaCrossbowRetreatGoal extends Goal {
             }
         
             // 🎯 小於 10 格：敵人太近，一邊拉弦，一邊往後撤退
-            else  if (distanceToTarget <= 10.0D){
+            else  if (distanceToTarget <= 11.0D && this.mob.getMilitiaMode() != VillageMilitiaEntity.MilitiaMode.GUARD 
+                     || distanceToTarget <= 4.0D && this.mob.getMilitiaMode() == VillageMilitiaEntity.MilitiaMode.GUARD 
+                     ){
                 this.pathUpdateTimer++;
                 if (this.pathUpdateTimer >= 8 || movingEntity.getNavigation().isDone()) {
                     this.pathUpdateTimer = 0;
